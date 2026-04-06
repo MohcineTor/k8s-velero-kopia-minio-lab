@@ -1,0 +1,67 @@
+global:
+  security:
+    allowInsecureImages: true
+
+mode: standalone
+
+## Authentication (Using your existing secret)
+auth:
+  existingSecret: minio
+  rootUserSecretKey: accesskey
+  rootPasswordSecretKey: secretkey
+
+## Automatic creation of the bucket for Velero
+defaultBuckets: "velero"
+
+
+## Persistence (CRITICAL to avoid losing your data)
+persistence:
+  enabled: true
+  size: 2Gi
+  storageClass: "nfs-csi"
+
+## Service API (For Velero)
+service:
+  type: ClusterIP
+  ports:
+    api: 9000
+
+## Ingress configuration (API & Console)
+ingress:
+  enabled: true
+  ingressClassName: nginx
+  hostname: minio-api.local  # URL for Velero
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: "0" # Important for large uploads
+
+console:
+  enabled: true
+  ingress:
+    enabled: true
+    ingressClassName: nginx
+    hostname: minio-console.local  # URL for Console UI
+  service:
+    type: ClusterIP
+    ports:
+       http: 9001
+  image:
+    registry: docker.io
+    repository: bitnamilegacy/minio-object-browser
+    tag: 2.0.2-debian-12-r3
+    pullPolicy: IfNotPresent
+
+## Resources (Give some extra headroom to avoid crashes)
+resources:
+  requests:
+    memory: 256Mi
+  limits:
+    memory: 768Mi
+
+## Image (Use the legacy Bitnami image)
+image:
+  registry: docker.io
+  repository: bitnamilegacy/minio
+  tag: 2025.7.23-debian-12-r3
+  pullPolicy: IfNotPresent
+
+

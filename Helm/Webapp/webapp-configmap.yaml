@@ -1,0 +1,106 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: webapp-code
+  namespace: webapp-ns
+data:
+  app.py: |
+    from flask import Flask, request, redirect, render_template_string
+    import psycopg2
+    import os
+
+    app = Flask(__name__)
+
+    DB_HOST = os.environ.get('DB_HOST', 'postgres')
+    DB_NAME = os.environ.get('DB_NAME', 'webapp')
+    DB_USER = os.environ.get('DB_USER', 'webuser')
+    DB_PASS = os.environ.get('DB_PASS', 'webpass')
+
+    def get_conn():
+        return psycopg2.connect(host=DB_HOST, dbname=DB_NAME, user=DB_USER, password=DB_PASS)
+
+    @app.route('/', methods=['GET', 'POST'])
+    def index():
+        if request.method == 'POST':
+            text = request.form.get('text')
+            conn = get_conn()
+            cur = conn.cursor()
+            cur.execute('CREATE TABLE IF NOT EXISTS submissions (id serial primary key, text text, created timestamptz default now())')
+            cur.execute('INSERT INTO submissions (text) VALUES (%s)', (text,))
+            conn.commit()
+            cur.close()
+            conn.close()
+            return redirect('/')
+
+        conn = get_conn()
+        cur = conn.cursor()
+        cur.execute('CREATE TABLE IF NOT EXISTS submissions (id serial primary key, text text, created timestamptz default now())')
+        cur.execute('SELECT id, text, created FROM submissions ORDER BY created DESC LIMIT 20')
+        rows = cur.fetchall()
+        cur.close()
+        conn.close()
+
+        html = '''<!doctype html>
+        <html lang="en">
+        <head>
+          <meta charset="utf-8" />
+          <meta name="viewport" content="width=device-width,initial-scale=1" />
+          <title>Webapp</title>
+          <style>
+            :root{ --bg:#f7f9fc; --card:#ffffff; --accent:#0066cc; --muted:#666; --radius:8px }
+            body{font-family:Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial; background:var(--bg); color:#222; margin:0; padding:24px}
+            .wrap{max-width:900px;margin:0 auto}
+            header{display:flex;align-items:center;gap:12px}
+            h1{margin:0;font-size:1.6rem;color:var(--accent)}
+            .card{background:var(--card);border-radius:var(--radius);box-shadow:0 6px 18px rgba(22,27,34,0.06);padding:20px;margin-top:18px}
+            form{display:flex;gap:8px;align-items:center}
+            input[type=text]{flex:1;padding:10px 12px;border:1px solid #e1e6ef;border-radius:6px;font-size:1rem}
+            button{background:var(--accent);color:white;border:none;padding:10px 14px;border-radius:6px;cursor:pointer}
+            button:hover{opacity:0.95}
+            .meta{color:var(--muted);font-size:0.9rem;margin-bottom:8px}
+            ul.submissions{list-style:none;padding:0;margin:0;display:grid;gap:10px}
+            li.item{padding:12px;border-radius:6px;background:#fbfdff;border:1px solid #eef3fb}
+            .item time{display:block;font-size:0.85rem;color:var(--muted)}
+            @media (max-width:600px){body{padding:12px}.wrap{padding:0 8px}}
+          </style>
+        </head>
+        <body>
+          <div class="wrap">
+            <header>
+              <h1>Webapp Submit text</h1>
+            </header>
+
+            <section class="card">
+              <div class="meta">Submit a short message; it will be stored in Postgres.</div>
+              <form method="post">
+                <input type="text" name="text" placeholder="Write something..." autocomplete="off" required />
+                <button type="submit">Submit</button>
+              </form>
+            </section>
+
+            <section class="card">
+              <h2 style="margin-top:0">Last submissions</h2>
+              <ul class="submissions">
+              {% for id, text, created in rows %}
+                <li class="item"><time>{{created}}</time><div>{{text}}</div></li>
+              {% endfor %}
+              </ul>
+            </section>
+          </div>
+        </body>
+        </html>
+        '''
+        return render_template_string(html, rows=rows)
+
+  requirements.txt: |
+    Flask==2.3.2
+    psycopg2-binary==2.9.10
+    gunicorn==20.1.0
+  start.sh: |
+    #!/bin/sh
+    set -e
+    echo "Installing Python dependencies..."
+    pip install --no-cache-dir -r /app/requirements.txt
+    echo "Changing directory to /app and starting gunicorn..."
+    cd /app
+    exec python -m gunicorn --bind 0.0.0.0:5000 app:app

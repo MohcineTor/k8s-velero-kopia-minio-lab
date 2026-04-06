@@ -1,0 +1,67 @@
+configuration:
+  backupStorageLocation:
+    - name: default
+      provider: aws
+      bucket: velero
+      default: true
+      config:
+        region: minio
+        s3ForcePathStyle: true
+        s3Url: http://minio.minio.svc.cluster.local:9000
+        publicUrl: http://minio-api.local
+        insecureSkipTLSVerify: "true"
+  volumeSnapshotLocation:
+    - name: default
+      provider: aws
+      config:
+        region: minio
+  defaultVolumesToFsBackup: true
+  uploaderType: kopia
+
+credentials:
+  useSecret: true
+  existingSecret: velero-repo-credentials
+
+deployNodeAgent: true
+nodeAgent:
+  podVolumePath: /var/lib/kubelet/pods
+  containerSecurityContext:
+    privileged: true
+
+initContainers:
+  - name: velero-plugin-for-aws
+    image: velero/velero-plugin-for-aws:v1.14.0
+    volumeMounts:
+      - mountPath: /target
+        name: plugins
+metrics:
+  enabled: true
+  scrapeInterval: "30s"
+  scrapeTimeout: "10s"
+
+  service:
+    type: ClusterIP
+
+  podAnnotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "8085"
+    prometheus.io/path: "/metrics"
+
+  serviceMonitor:
+    autodetect: true
+    enabled: true
+    namespace: velero
+    additionalLabels: 
+      release: kube-prom-stack
+
+  nodeAgentPodMonitor:
+    autodetect: true
+    enabled: true
+    annotations: {}
+    additionalLabels: 
+      release: kube-prom-stack
+
+  prometheusRule:
+    autodetect: true
+    enabled: false
+    additionalLabels: {}

@@ -1,0 +1,53 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: webapp
+  namespace: webapp-ns
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: webapp
+  template:
+    metadata:
+      labels:
+        app: webapp
+    spec:
+      initContainers:
+      - name: init-copy-scripts
+        image: busybox:1.36
+        command: ["/bin/sh", "-c"]
+        args:
+          - cp /tmp-config/start.sh /workdir/start.sh && chmod +x /workdir/start.sh
+        volumeMounts:
+          - name: webapp-code
+            mountPath: /tmp-config
+          - name: script-dir
+            mountPath: /workdir
+      containers:
+      - name: webapp
+        image: python:3.11-slim
+        command: ["/workdir/start.sh"]
+        ports:
+        - containerPort: 5000
+          name: http
+        env:
+          - name: DB_HOST
+            value: "postgres"
+          - name: DB_NAME
+            value: "webapp"
+          - name: DB_USER
+            value: "webuser"
+          - name: DB_PASS
+            value: "webpass"
+        volumeMounts:
+          - name: webapp-code
+            mountPath: /app
+          - name: script-dir
+            mountPath: /workdir
+      volumes:
+        - name: webapp-code
+          configMap:
+            name: webapp-code
+        - name: script-dir
+          emptyDir: {}
